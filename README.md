@@ -23,3 +23,88 @@ We’ve implemented a flexible guard-based authentication structure (like Larave
 ---
 
 ## 📁 Folder Structure
+
+├── controllers/ # Business logic
+│ └── UserController.ts
+├── middleware/ # authGuard middleware
+│ └── authGuard.ts
+├── models/ # Mongoose models
+│ ├── User.ts
+│ ├── Admin.ts
+│ └── Vendor.ts
+├── helpers/ # Utility functions
+│ ├── function.ts
+│ └── pagination.ts
+├── routes/ # Express routes
+│ └── userRoutes.ts
+├── index.ts # Entry point (Express + MongoDB)
+└── types/ # Custom TS types (e.g. AuthRequest)
+
+yaml
+نسخ
+تحرير
+
+---
+
+## 🔐 Guards Explained
+
+We mimic Laravel's guard system using:
+
+```ts
+const GUARD_MODELS = {
+  user: User,
+  admin: Admin,
+  vendor: Vendor,
+};
+```
+
+Reusable helper to paginate any Mongoose model:
+
+Pagination(model, query, page, limit, select, sort)
+
+{
+data: [...],
+currentPage,
+totalPages,
+totalItems
+}
+
+🛡️ JWT Auth + Middleware
+
+Token is stored in Authorization: Bearer <token>
+
+authGuard middleware decodes the token and fetches the user from DB based on guard
+
+🧪 Environment Variables
+
+Use a .env file in the root:
+
+PORT=5000
+JWT_SECRET=your_secret_key
+MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/db
+
+🧑‍💻 Future Improvements
+
+Refresh Tokens
+
+Role-based permissions
+
+Email verification
+
+Password reset flow
+
+🛠️ Technologies Used
+
+Node.js + Express
+
+TypeScript
+
+MongoDB + Mongoose
+
+JWT + bcrypt
+
+dotenv
+
+yaml
+نسخ
+تحرير
