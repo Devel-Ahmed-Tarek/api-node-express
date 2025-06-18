@@ -40,10 +40,6 @@ We’ve implemented a flexible guard-based authentication structure (like Larave
 ├── index.ts # Entry point (Express + MongoDB)
 └── types/ # Custom TS types (e.g. AuthRequest)
 
-yaml
-نسخ
-تحرير
-
 ---
 
 ## 🔐 Guards Explained
@@ -104,7 +100,3 @@ MongoDB + Mongoose
 JWT + bcrypt
 
 dotenv
-
-yaml
-نسخ
-تحرير
