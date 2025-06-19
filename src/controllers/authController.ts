@@ -62,7 +62,8 @@ export const login = async (req: Request, res: Response) => {
 
 export const getProfileuser = async (req: Request, res: Response) => {
   try {
-    const user = req.user;
+    const user = req.user as object;
+    const guard = req.headers.guard as string;
     if (!user) {
       return sendResponse(res, 404, "User not found");
     }

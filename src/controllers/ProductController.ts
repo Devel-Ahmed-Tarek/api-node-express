@@ -77,3 +77,27 @@ export const getProducts = async (req: Request, res: Response) => {
     });
   }
 };
+
+export const getProductById = async (req: Request, res: Response) => {
+  try {
+    const productId: string = req.params.id;
+    const product: IProduct | null = await Product.findById(productId);
+    if (!product) {
+      return sendResponse(res, 200, "Product not found", null);
+    }
+    const baseUrl: string = `${req.protocol}://${req.get("host")}`;
+    const formatted: any = {
+      id: product._id,
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      image: product.image ? `${baseUrl}/${product.image}` : undefined,
+    };
+    return sendResponse(res, 200, "Product retrieved successfully", formatted);
+  } catch (err: any) {
+    console.error("Error retrieving product:", err);
+    return sendResponse(res, 500, "Failed to retrieve product", {
+      error: err.message,
+    });
+  }
+};
