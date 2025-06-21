@@ -5,7 +5,7 @@ import User from "../models/User";
 import Admin from "../models/Admin";
 import Vendor from "../models/Vendor";
 import { sendResponse, validated } from "../helpers/function";
-import { emailService } from "../services";
+import { emailService } from "../Mail";
 import { name } from "ejs";
 const GUARD_MODELS: Record<string, any> = {
   user: User,

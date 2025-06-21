@@ -3,7 +3,7 @@ import User, { IUser } from "../models/User";
 import { sendResponse, validated } from "../helpers/function";
 import Pagination from "../helpers/pagination";
 import bcrypt from "bcryptjs";
-import { emailService } from "../services";
+import { emailService } from "../Mail";
 
 export const createUser = async (req: Request, res: Response) => {
   try {
@@ -25,8 +25,8 @@ export const createUser = async (req: Request, res: Response) => {
       email,
       password,
     });
-
     await user.save();
+
     // send mail
     await emailService.sendEmail(email, "Welcome!", "welcome", {
       name: user.name,

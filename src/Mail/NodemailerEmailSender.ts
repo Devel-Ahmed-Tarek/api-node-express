@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import { IEmailSender } from "../interfaces/IEmailSender";
 import { ITemplateRenderer } from "../interfaces/ITemplateRenderer";
+import { error, info } from "console";
 
 dotenv.config();
 
@@ -38,13 +39,21 @@ export class NodemailerEmailSender implements IEmailSender {
   ): Promise<void> {
     const html = await this.renderer.render(template, data);
 
-    await this.transporter.sendMail({
-      from: process.env.MAIL_FROM,
-      to,
-      subject,
-      html,
-      attachments,
-    });
-    console.log("📧 Sending email to:", to);
+    await this.transporter.sendMail(
+      {
+        from: process.env.MAIL_FROM,
+        to,
+        subject,
+        html,
+        attachments,
+      },
+      (err, info) => {
+        if (err) {
+          console.error("❌ Error sending email:", err);
+        } else {
+          console.log("✅ Email sent:", info.response);
+        }
+      }
+    );
   }
 }
