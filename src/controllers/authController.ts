@@ -4,8 +4,9 @@ import jwt from "jsonwebtoken";
 import User from "../models/User";
 import Admin from "../models/Admin";
 import Vendor from "../models/Vendor";
-import { sendResponse } from "../helpers/function";
-
+import { sendResponse, validated } from "../helpers/function";
+import { emailService } from "../services";
+import { name } from "ejs";
 const GUARD_MODELS: Record<string, any> = {
   user: User,
   admin: Admin,
@@ -14,13 +15,16 @@ const GUARD_MODELS: Record<string, any> = {
 
 export const login = async (req: Request, res: Response) => {
   try {
-    const { email, password, guard } = req.body;
-
-    // Validate required fields
-    if (!email || !password || !guard) {
-      return sendResponse(res, 400, "Email, password, and guard are required.");
+    const rules = {
+      email: "required|email",
+      password: "required|min:6",
+      guard: "required|in:user,admin,vendor",
+    };
+    const { passes, errors } = validated(req.body, rules);
+    if (!passes) {
+      return sendResponse(res, 400, "Validation failed", { errors });
     }
-
+    const { email, password, guard } = req.body;
     // Check guard model exists
     const Model = GUARD_MODELS[guard];
     if (!Model) {
@@ -49,6 +53,10 @@ export const login = async (req: Request, res: Response) => {
     // Hide password before sending response
     const userData = user.toObject();
     delete userData.password;
+    // send mail
+    await emailService.sendEmail(email, "Welcome!", "welcome", {
+      name: user.name,
+    });
 
     return sendResponse(res, 200, "Login successful", {
       token,
@@ -62,11 +70,13 @@ export const login = async (req: Request, res: Response) => {
 
 export const getProfileuser = async (req: Request, res: Response) => {
   try {
-    const user = req.user as object;
+    let user = req.user as object;
     const guard = req.headers.guard as string;
+
     if (!user) {
       return sendResponse(res, 404, "User not found");
     }
+    user.guard = guard;
     return sendResponse(res, 200, "User profile fetched successfully", user);
   } catch (err: any) {
     console.error("Error fetching user profile:", err);

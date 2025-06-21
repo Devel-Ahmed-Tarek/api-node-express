@@ -1,7 +1,9 @@
 import { Request, Response } from "express";
 import User, { IUser } from "../models/User";
-import { sendResponse } from "../helpers/function";
+import { sendResponse, validated } from "../helpers/function";
 import Pagination from "../helpers/pagination";
+import bcrypt from "bcryptjs";
+import { emailService } from "../services";
 
 export const createUser = async (req: Request, res: Response) => {
   try {
@@ -25,6 +27,10 @@ export const createUser = async (req: Request, res: Response) => {
     });
 
     await user.save();
+    // send mail
+    await emailService.sendEmail(email, "Welcome!", "welcome", {
+      name: user.name,
+    });
     return sendResponse(res, 201, "User created successfully", user);
   } catch (err: any) {
     console.error("Error creating user:", err);
@@ -58,6 +64,41 @@ export const getusers = async (req: Request, res: Response) => {
     }
 
     return sendResponse(res, 200, "Users fetched successfully", result);
+  } catch (err: any) {
+    console.error("Error fetching users:", err);
+    return sendResponse(res, 500, "Failed to fetch users", {
+      error: err.message,
+    });
+  }
+};
+
+export const updateUser = async (req: Request, res: Response) => {
+  try {
+    const rules = {
+      email: "required|email",
+      name: "required|string",
+      password: "required|min:6",
+    };
+    const { passed, errors } = validated(req.body, rules);
+    if (!passed) {
+      return sendResponse(res, 400, "Validation failed", { errors });
+    }
+    const id = req.user.id;
+    const hashedPassword = await bcrypt.hash(req.body.password, 10);
+
+    const userUpdated = await User.findByIdAndUpdate(
+      { _id: id },
+      {
+        email: req.body.email,
+        name: req.body.name,
+        password: hashedPassword,
+      },
+      { new: true, runValidators: true }
+    ).select("-password");
+    if (!userUpdated) {
+      return sendResponse(res, 404, "User not found");
+    }
+    return sendResponse(res, 200, "Users fetched successfully", userUpdated);
   } catch (err: any) {
     console.error("Error fetching users:", err);
     return sendResponse(res, 500, "Failed to fetch users", {

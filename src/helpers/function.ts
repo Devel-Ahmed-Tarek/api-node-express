@@ -7,6 +7,7 @@ import { UploadedFile } from "express-fileupload";
 // helpers/sectionHelper.ts
 import { Request } from "express";
 import { AppConfig } from "../config";
+import Validator from "validatorjs";
 
 // ===== 1. sendResponse =====
 export const sendResponse = <T>(
@@ -104,4 +105,17 @@ export const formatSectionData = (
   });
 
   return formatted;
+};
+
+export const validated = (
+  data: Record<string, any>,
+  rules: Record<string, any>,
+  messages: Record<string, string> = {}
+) => {
+  const validatoiin = new Validator(data, rules, messages);
+  return {
+    passes: validatoiin.passes(),
+    fails: validatoiin.fails(),
+    errors: validatoiin.errors.all(),
+  };
 };

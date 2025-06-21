@@ -4,6 +4,7 @@ import path from "path";
 import routes from "./routes/api"; // routes/index.ts
 import fileUpload from "express-fileupload";
 import dotenv from "dotenv";
+import Validator from "validatorjs";
 
 dotenv.config();
 
