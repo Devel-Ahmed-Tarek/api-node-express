@@ -1,4 +1,4 @@
-// helpers/Helper.ts
+// helpers/function.ts
 
 import fs from "fs";
 import path from "path";
@@ -66,46 +66,46 @@ export const uploadFile = (folder: string, file: UploadedFile): string => {
   return `uploads/${folder}/${name}`;
 };
 
-export const formatSectionData = (
-  section: any,
-  req: Request
-): Record<string, any> => {
-  const lang = (req.query.lang as string) || "en";
-  const baseUrl = `${req.protocol}://${req.get("host")}`;
-  const schema = section.fields; // fields is array not object
-  const rawData = section.data;
+// export const formatSectionData = (
+//   section: any,
+//   req: Request
+// ): Record<string, any> => {
+//   const lang = (req.query.lang as string) || "en";
+//   const baseUrl = `${req.protocol}://${req.get("host")}`;
+//   const schema = section.fields; // fields is array not object
+//   const rawData = section.data;
 
-  const formatted: Record<string, any> = {};
+//   const formatted: Record<string, any> = {};
 
-  schema.forEach((field: any) => {
-    const key = field.key;
-    const config = field;
-    const value = rawData[key];
+//   schema.forEach((field: any) => {
+//     const key = field.key;
+//     const config = field;
+//     const value = rawData[key];
 
-    // multi-language support
-    if (config.translatable && typeof value === "object") {
-      formatted[key] =
-        value[lang] ?? value[AppConfig.SUPPORTED_LANGUAGES[0]] ?? "";
-    }
+//     // multi-language support
+//     if (config.translatable && typeof value === "object") {
+//       formatted[key] =
+//         value[lang] ?? value[AppConfig.SUPPORTED_LANGUAGES[0]] ?? "";
+//     }
 
-    // single image
-    else if (config.type === "image" && typeof value === "string") {
-      formatted[key] = `${baseUrl}/${value}`;
-    }
+//     // single image
+//     else if (config.type === "image" && typeof value === "string") {
+//       formatted[key] = `${baseUrl}/${value}`;
+//     }
 
-    // multiple images
-    else if (config.type === "multiImage" && Array.isArray(value)) {
-      formatted[key] = value.map((img) => `${baseUrl}/${img}`);
-    }
+//     // multiple images
+//     else if (config.type === "multiImage" && Array.isArray(value)) {
+//       formatted[key] = value.map((img) => `${baseUrl}/${img}`);
+//     }
 
-    // normal text data
-    else {
-      formatted[key] = value;
-    }
-  });
+//     // normal text data
+//     else {
+//       formatted[key] = value;
+//     }
+//   });
 
-  return formatted;
-};
+//   return formatted;
+// };
 
 export const validated = (
   data: Record<string, any>,

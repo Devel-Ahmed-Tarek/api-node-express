@@ -20,7 +20,6 @@ export class NodemailerEmailSender implements IEmailSender {
       },
     });
 
-    // ✅ تحقق من صلاحية الاتصال بـ SMTP
     this.transporter.verify((err, success) => {
       if (err) {
         console.error("❌ SMTP config error:", err);

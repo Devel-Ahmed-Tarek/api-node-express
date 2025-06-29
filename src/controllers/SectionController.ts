@@ -1,9 +1,72 @@
+// controllers/SectionController.ts
 import { Request, Response } from "express";
 import Section from "../models/Section";
-import { sendResponse } from "../helpers/function";
-import { uploadFile, formatSectionData } from "../helpers/function";
+import { sendResponse, uploadFile } from "../helpers/function";
+import { formatSectionData } from "../helpers/DynamicSectionFormatter";
 import { UploadedFile } from "express-fileupload";
 import { AppConfig } from "../config";
+import { v4 as uuidv4 } from "uuid";
+
+// 🧠 Recursive Data Store Handler
+const storeSectionData = async (
+  body: any,
+  files: any,
+  fields: any[]
+): Promise<any> => {
+  const data: Record<string, any> = {};
+
+  for (const field of fields) {
+    const { key, type, translatable, children } = field;
+
+    if (type === "group") {
+      data[key] = await storeSectionData(
+        body?.[key] || {},
+        files?.[key] || {},
+        children
+      );
+    } else if (type === "repeater") {
+      const items = body?.[key] || [];
+      data[key] = await Promise.all(
+        items.map(async (item: any, i: number) => {
+          const itemFiles = files?.[key]?.[i] || {};
+          const childData = await storeSectionData(item, itemFiles, children);
+          return { id: uuidv4(), ...childData };
+        })
+      );
+    } else if (translatable) {
+      const fieldData: Record<string, string> = {};
+      for (const lang of AppConfig.SUPPORTED_LANGUAGES) {
+        const transKey = `${key}[${lang}]`;
+        if (body?.[key]?.[lang]) fieldData[lang] = body[key][lang];
+        else if (body?.[transKey]) fieldData[lang] = body[transKey];
+      }
+      data[key] = fieldData;
+    } else if (type === "image") {
+      if (files?.[key]) {
+        const file = files[key] as UploadedFile;
+        data[key] = await uploadFile("sections", file);
+      } else if (body?.[key]) {
+        data[key] = body[key];
+      }
+    } else if (type === "multiImage") {
+      if (files?.[key]) {
+        const allFiles = Array.isArray(files[key]) ? files[key] : [files[key]];
+        const paths = await Promise.all(
+          allFiles.map((file: UploadedFile) => uploadFile("sections", file))
+        );
+        data[key] = paths;
+      } else if (body?.[key]) {
+        data[key] = body[key];
+      }
+    } else {
+      if (body?.[key] !== undefined) {
+        data[key] = body[key];
+      }
+    }
+  }
+
+  return data;
+};
 
 export const createSection = async (req: Request, res: Response) => {
   try {
@@ -13,7 +76,14 @@ export const createSection = async (req: Request, res: Response) => {
       return sendResponse(res, 400, "Name and fields are required");
     }
 
-    const validTypes = ["text", "image", "multiImage", "number"];
+    const validTypes = [
+      "text",
+      "image",
+      "multiImage",
+      "number",
+      "group",
+      "repeater",
+    ];
 
     for (const field of fields) {
       const { key, type, translatable, required } = field;
@@ -35,13 +105,10 @@ export const createSection = async (req: Request, res: Response) => {
       }
     }
 
-    //Search for existing section by name
     let section = await Section.findOne({ name });
 
     if (section) {
       const existingKeys = section.fields.map((f: any) => f.key);
-
-      //Validate new fields against existing ones
       const newFields = fields.filter(
         (field: any) => !existingKeys.includes(field.key)
       );
@@ -50,13 +117,10 @@ export const createSection = async (req: Request, res: Response) => {
         return sendResponse(res, 200, "No new fields to add", section);
       }
 
-      //merge new fields with existing ones
       section.fields = [...section.fields, ...newFields];
       await section.save();
-
       return sendResponse(res, 200, "New fields added to section", section);
     } else {
-      //Create new section
       section = await Section.create({ name, fields });
       return sendResponse(res, 201, "Section created successfully", section);
     }
@@ -71,61 +135,21 @@ export const createSection = async (req: Request, res: Response) => {
 export const addSectionData = async (req: Request, res: Response) => {
   try {
     const { sectionName } = req.params;
-    const body = req.body;
-
     const section = await Section.findOne({ name: sectionName });
-    if (!section) {
-      return sendResponse(res, 404, "Section not found");
-    }
+    if (!section) return sendResponse(res, 404, "Section not found");
 
-    const existingData: any = section.data || {};
-    const updatedData: any = { ...existingData }; // Start with existing data
+    const newData = await storeSectionData(req.body, req.files, section.fields);
 
-    for (const field of section.fields) {
-      const { key, type, translatable } = field;
+    section.data = {
+      ...(section.data || {}),
+      ...newData,
+    };
 
-      if (translatable) {
-        if (!updatedData[key]) updatedData[key] = {};
-
-        for (const lang of AppConfig.SUPPORTED_LANGUAGES) {
-          const fieldKey = `${key}[${lang}]`;
-          if (body[fieldKey]) {
-            updatedData[key][lang] = body[fieldKey];
-          }
-        }
-      } else if (type === "image") {
-        if (req.files && req.files[key]) {
-          const uploadedImage = req.files[key] as UploadedFile;
-          const imagePath = await uploadFile("sections", uploadedImage);
-          updatedData[key] = imagePath;
-        } else if (body[key]) {
-          updatedData[key] = body[key];
-        }
-      } else if (type === "multiImage") {
-        if (req.files && req.files[key]) {
-          const files = Array.isArray(req.files[key])
-            ? req.files[key]
-            : [req.files[key]];
-          const paths = await Promise.all(
-            files.map((file) => uploadFile("sections", file))
-          );
-          updatedData[key] = paths;
-        } else if (body[key]) {
-          updatedData[key] = body[key];
-        }
-      } else {
-        if (body[key]) {
-          updatedData[key] = body[key];
-        }
-      }
-    }
-
-    section.data = updatedData;
     await section.save();
 
     return sendResponse(res, 200, "Section data updated successfully", section);
   } catch (err: any) {
-    console.error("Error updating section:", err);
+    console.error("Error adding section data:", err);
     return sendResponse(res, 500, "Failed to update section", {
       error: err.message,
     });
@@ -135,100 +159,44 @@ export const addSectionData = async (req: Request, res: Response) => {
 export const getSectionByName = async (req: Request, res: Response) => {
   try {
     const { sectionName } = req.params;
-
     const section = await Section.findOne({ name: sectionName });
-
-    if (!section) {
-      return sendResponse(res, 404, "Section not found");
-    }
+    if (!section) return sendResponse(res, 404, "Section not found");
 
     const formatted = formatSectionData(section, req);
-
     return sendResponse(res, 200, "Section data fetched successfully", {
       name: section.name,
       data: formatted,
     });
   } catch (err: any) {
     console.error("Error fetching section:", err);
-    return sendResponse(res, 500, "Server error", { error: err });
+    return sendResponse(res, 500, "Server error", { error: err.message });
   }
 };
 
 export const updateSectionData = async (req: Request, res: Response) => {
   try {
     const { sectionName } = req.params;
-    const body = req.body;
-
     const section = await Section.findOne({ name: sectionName });
     if (!section) return sendResponse(res, 404, "Section not found");
 
-    const schema = section.fields;
-    const existingData = section.data || {};
+    const updatedData = await storeSectionData(
+      req.body,
+      req.files,
+      section.fields
+    );
 
-    for (const fieldConfig of schema) {
-      const key = fieldConfig.key;
-      const type = fieldConfig.type;
-      const isTranslatable = fieldConfig.translatable;
+    const merged = {
+      ...(section.data || {}),
+      ...updatedData,
+    };
 
-      // Check if the key exists in the request body or files
-      const hasValue =
-        body.hasOwnProperty(key) || (req.files && req.files[key]);
-
-      if (!hasValue) continue;
-
-      // Translatable field
-      if (isTranslatable) {
-        if (!existingData[key]) existingData[key] = {};
-
-        const inputTranslations = body[key];
-        for (const locale in inputTranslations) {
-          if (!AppConfig.SUPPORTED_LANGUAGES.includes(locale)) continue;
-
-          existingData[key][locale] = inputTranslations[locale];
-        }
-      }
-
-      // Single image
-      else if (type === "image" && req.files?.[key]) {
-        const uploaded = req.files[key];
-        const imagePath = await uploadFile("sections", uploaded);
-        existingData[key] = imagePath;
-      }
-
-      // Multiple images
-      else if (type === "multiImage" && req.files?.[key]) {
-        const uploaded = req.files[key];
-        const images = Array.isArray(uploaded) ? uploaded : [uploaded];
-        const paths = [];
-
-        for (const img of images) {
-          const imgPath = await uploadFile("sections", img);
-          paths.push(imgPath);
-        }
-
-        existingData[key] = paths;
-      }
-
-      // Text or number or other direct fields
-      else {
-        existingData[key] = body[key];
-      }
-    }
-
-    // Update the section with the new data
     await Section.updateOne(
       { _id: section._id },
-      { $set: { data: existingData, updatedAt: new Date() } }
+      { $set: { data: merged, updatedAt: new Date() } }
     );
 
-    const updatedSection = await Section.findById(section._id);
-
-    return sendResponse(
-      res,
-      200,
-      "Section data updated successfully",
-      updatedSection
-    );
+    const final = await Section.findById(section._id);
+    return sendResponse(res, 200, "Section data updated successfully", final);
   } catch (err: any) {
     console.error("Update error:", err);
     return sendResponse(res, 500, "Server error", { error: err.message });

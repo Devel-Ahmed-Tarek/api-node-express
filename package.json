@@ -9,7 +9,7 @@
   },
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "This project is a backend authentication system built with **Node.js**, **Express**, and **TypeScript**, integrated with **MongoDB** via **Mongoose**.",
   "dependencies": {
     "bcryptjs": "^3.0.2",
     "dotenv": "^16.5.0",
@@ -37,5 +37,14 @@
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.8.3"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Devel-Ahmed-Tarek/api-node-express.git"
+  },
+  "keywords": [],
+  "bugs": {
+    "url": "https://github.com/Devel-Ahmed-Tarek/api-node-express/issues"
+  },
+  "homepage": "https://github.com/Devel-Ahmed-Tarek/api-node-express#readme"
 }
