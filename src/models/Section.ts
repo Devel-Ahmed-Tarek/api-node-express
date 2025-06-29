@@ -2,9 +2,10 @@ import mongoose, { Document, Schema } from "mongoose";
 
 interface FieldDefinition {
   key: string;
-  type: "text" | "image" | "multiImage" | "number";
+  type: "text" | "image" | "multiImage" | "number" | "group" | "repeater";
   translatable: boolean;
   required: boolean;
+  children?: FieldDefinition[];
 }
 
 export interface ISection extends Document {
@@ -20,7 +21,7 @@ const FieldSchema = new Schema<FieldDefinition>(
     key: { type: String, required: true },
     type: {
       type: String,
-      enum: ["text", "image", "multiImage", "number"],
+      enum: ["text", "image", "multiImage", "number", "group", "repeater"],
       required: true,
     },
     translatable: { type: Boolean, default: false },
@@ -28,6 +29,10 @@ const FieldSchema = new Schema<FieldDefinition>(
   },
   { _id: false }
 );
+
+FieldSchema.add({
+  children: [FieldSchema],
+});
 
 const SectionSchema = new Schema<ISection>(
   {

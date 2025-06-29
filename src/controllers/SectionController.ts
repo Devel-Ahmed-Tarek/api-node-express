@@ -6,9 +6,9 @@ import { formatSectionData } from "../helpers/DynamicSectionFormatter";
 import { UploadedFile } from "express-fileupload";
 import { AppConfig } from "../config";
 import { v4 as uuidv4 } from "uuid";
+import _ from "lodash";
 
-// 🧠 Recursive Data Store Handler
-const storeSectionData = async (
+export const storeSectionData = async (
   body: any,
   files: any,
   fields: any[]
@@ -19,26 +19,95 @@ const storeSectionData = async (
     const { key, type, translatable, children } = field;
 
     if (type === "group") {
-      data[key] = await storeSectionData(
-        body?.[key] || {},
-        files?.[key] || {},
-        children
-      );
+      // 👇 تجميع body و files المتداخلة الخاصة بالـ group من form-data
+      const subBody = {};
+      const subFiles = {};
+      const prefix = `${key}[`;
+
+      for (const bKey in body) {
+        if (bKey.startsWith(prefix)) {
+          const newKey = bKey.substring(prefix.length, bKey.length - 1);
+          const path = newKey.replace(/\]/g, "").split("[");
+          let current = subBody;
+          for (let i = 0; i < path.length - 1; i++) {
+            current[path[i]] = current[path[i]] || {};
+            current = current[path[i]];
+          }
+          current[path[path.length - 1]] = body[bKey];
+        }
+      }
+
+      for (const fKey in files) {
+        if (fKey.startsWith(prefix)) {
+          const newKey = fKey.substring(prefix.length, fKey.length - 1);
+          const path = newKey.replace(/\]/g, "").split("[");
+          let current = subFiles;
+          for (let i = 0; i < path.length - 1; i++) {
+            current[path[i]] = current[path[i]] || {};
+            current = current[path[i]];
+          }
+          current[path[path.length - 1]] = files[fKey];
+        }
+      }
+
+      data[key] = await storeSectionData(subBody, subFiles, children);
     } else if (type === "repeater") {
       const items = body?.[key] || [];
-      data[key] = await Promise.all(
-        items.map(async (item: any, i: number) => {
-          const itemFiles = files?.[key]?.[i] || {};
-          const childData = await storeSectionData(item, itemFiles, children);
-          return { id: uuidv4(), ...childData };
-        })
-      );
+      const result: any[] = [];
+
+      // features[0][title][en]
+      const flatItems: Record<number, any> = {};
+      for (const bKey in body) {
+        const match = bKey.match(new RegExp(`^${key}\\[(\\d+)\\]`));
+        if (match) {
+          const index = parseInt(match[1]);
+          const rest = bKey.slice(match[0].length + 1, bKey.length - 1); // remove outer brackets
+          const path = rest.replace(/\]/g, "").split("[");
+          flatItems[index] = flatItems[index] || {};
+          let current = flatItems[index];
+          for (let i = 0; i < path.length - 1; i++) {
+            current[path[i]] = current[path[i]] || {};
+            current = current[path[i]];
+          }
+          current[path[path.length - 1]] = body[bKey];
+        }
+      }
+
+      const flatFiles: Record<number, any> = {};
+      for (const fKey in files) {
+        const match = fKey.match(new RegExp(`^${key}\\[(\\d+)\\]`));
+        if (match) {
+          const index = parseInt(match[1]);
+          const rest = fKey.slice(match[0].length + 1, fKey.length - 1);
+          const path = rest.replace(/\]/g, "").split("[");
+          flatFiles[index] = flatFiles[index] || {};
+          let current = flatFiles[index];
+          for (let i = 0; i < path.length - 1; i++) {
+            current[path[i]] = current[path[i]] || {};
+            current = current[path[i]];
+          }
+          current[path[path.length - 1]] = files[fKey];
+        }
+      }
+
+      const indexes = Object.keys(flatItems).map((i) => parseInt(i));
+      for (const i of indexes) {
+        const itemBody = flatItems[i];
+        const itemFiles = flatFiles[i] || {};
+        const childData = await storeSectionData(itemBody, itemFiles, children);
+        result.push({ id: uuidv4(), ...childData });
+      }
+
+      data[key] = result;
     } else if (translatable) {
       const fieldData: Record<string, string> = {};
       for (const lang of AppConfig.SUPPORTED_LANGUAGES) {
         const transKey = `${key}[${lang}]`;
-        if (body?.[key]?.[lang]) fieldData[lang] = body[key][lang];
-        else if (body?.[transKey]) fieldData[lang] = body[transKey];
+        if (body?.[key]?.[lang]) {
+          fieldData[lang] = body[key][lang];
+        } else if (body?.[transKey]) {
+          fieldData[lang] = body[transKey];
+        }
       }
       data[key] = fieldData;
     } else if (type === "image") {
@@ -85,32 +154,41 @@ export const createSection = async (req: Request, res: Response) => {
       "repeater",
     ];
 
-    for (const field of fields) {
-      const { key, type, translatable, required } = field;
+    // ✅validate fields structure (recursive)
+    const validateFields = (fields: any[]): boolean => {
+      for (const field of fields) {
+        const { key, type, translatable, required, children } = field;
 
-      if (!key || !type) {
-        return sendResponse(res, 400, "Each field must have key and type");
-      }
+        if (!key || !type) return false;
+        if (!validTypes.includes(type)) return false;
+        if (typeof translatable !== "boolean" || typeof required !== "boolean")
+          return false;
 
-      if (!validTypes.includes(type)) {
-        return sendResponse(res, 400, `Invalid field type: ${type}`);
+        // check children if type is group or repeater
+        if (
+          (type === "group" || type === "repeater") &&
+          Array.isArray(children)
+        ) {
+          const isValid = validateFields(children);
+          if (!isValid) return false;
+        }
       }
+      return true;
+    };
 
-      if (typeof translatable !== "boolean" || typeof required !== "boolean") {
-        return sendResponse(
-          res,
-          400,
-          "translatable and required must be boolean"
-        );
-      }
+    if (!validateFields(fields)) {
+      return sendResponse(res, 400, "Invalid field structure detected");
     }
 
+    // Search for existing section
     let section = await Section.findOne({ name });
 
     if (section) {
+      // في حالة التحديث نضيف فقط الحقول الجديدة بناءً على الـ key
       const existingKeys = section.fields.map((f: any) => f.key);
+
       const newFields = fields.filter(
-        (field: any) => !existingKeys.includes(field.key)
+        (f: any) => !existingKeys.includes(f.key)
       );
 
       if (newFields.length === 0) {
@@ -121,6 +199,7 @@ export const createSection = async (req: Request, res: Response) => {
       await section.save();
       return sendResponse(res, 200, "New fields added to section", section);
     } else {
+      // ✅ إنشاء سكشن جديد
       section = await Section.create({ name, fields });
       return sendResponse(res, 201, "Section created successfully", section);
     }
@@ -173,28 +252,34 @@ export const getSectionByName = async (req: Request, res: Response) => {
   }
 };
 
+// Update section data
 export const updateSectionData = async (req: Request, res: Response) => {
   try {
     const { sectionName } = req.params;
-    const section = await Section.findOne({ name: sectionName });
-    if (!section) return sendResponse(res, 404, "Section not found");
 
+    // 🔍 Find the section by name
+    const section = await Section.findOne({ name: sectionName });
+    if (!section) {
+      return sendResponse(res, 404, "Section not found");
+    }
+
+    // 🛠️ Prepare updated data by recursively processing input body and files
     const updatedData = await storeSectionData(
       req.body,
       req.files,
       section.fields
     );
 
-    const merged = {
-      ...(section.data || {}),
-      ...updatedData,
-    };
+    // 🔁 Deep merge the updated data with existing section data
+    const merged = _.merge({}, section.data || {}, updatedData);
 
+    // 💾 Update the section document in the database
     await Section.updateOne(
       { _id: section._id },
       { $set: { data: merged, updatedAt: new Date() } }
     );
 
+    // ✅ Fetch the updated section and return it
     const final = await Section.findById(section._id);
     return sendResponse(res, 200, "Section data updated successfully", final);
   } catch (err: any) {
