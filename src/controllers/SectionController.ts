@@ -34,27 +34,24 @@ export const storeSectionData = async (
           return acc;
         }, {});
 
-      // تحويلهم إلى Object حقيقي باستخدام qs
       const parsedBody = qs.parse(filteredBody);
       const parsedFiles = qs.parse(filteredFiles);
 
-      // استدعاء الدالة بشكل متداخل
+      // ✅ هذا السطر يحل مشكلة ضياع الحقول الداخلية مثل cta
       data[key] = await storeSectionData(
-        parsedBody[key] || {},
-        parsedFiles[key] || {},
+        parsedBody?.[key] ?? parsedBody ?? {},
+        parsedFiles?.[key] ?? parsedFiles ?? {},
         children
       );
     } else if (type === "repeater") {
-      const items = body?.[key] || [];
-      const result: any[] = [];
-
-      // features[0][title][en]
       const flatItems: Record<number, any> = {};
+      const flatFiles: Record<number, any> = {};
+
       for (const bKey in body) {
         const match = bKey.match(new RegExp(`^${key}\\[(\\d+)\\]`));
         if (match) {
           const index = parseInt(match[1]);
-          const rest = bKey.slice(match[0].length + 1, bKey.length - 1); // remove outer brackets
+          const rest = bKey.slice(match[0].length + 1, bKey.length - 1);
           const path = rest.replace(/\]/g, "").split("[");
           flatItems[index] = flatItems[index] || {};
           let current = flatItems[index];
@@ -66,7 +63,6 @@ export const storeSectionData = async (
         }
       }
 
-      const flatFiles: Record<number, any> = {};
       for (const fKey in files) {
         const match = fKey.match(new RegExp(`^${key}\\[(\\d+)\\]`));
         if (match) {
@@ -83,6 +79,7 @@ export const storeSectionData = async (
         }
       }
 
+      const result: any[] = [];
       const indexes = Object.keys(flatItems).map((i) => parseInt(i));
       for (const i of indexes) {
         const itemBody = flatItems[i];
