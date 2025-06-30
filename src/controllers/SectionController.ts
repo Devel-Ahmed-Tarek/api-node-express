@@ -7,6 +7,7 @@ import { UploadedFile } from "express-fileupload";
 import { AppConfig } from "../config";
 import { v4 as uuidv4 } from "uuid";
 import _ from "lodash";
+import qs from "qs";
 
 export const storeSectionData = async (
   body: any,
@@ -19,38 +20,30 @@ export const storeSectionData = async (
     const { key, type, translatable, children } = field;
 
     if (type === "group") {
-      // 👇 تجميع body و files المتداخلة الخاصة بالـ group من form-data
-      const subBody = {};
-      const subFiles = {};
-      const prefix = `${key}[`;
+      const filteredBody = Object.keys(body)
+        .filter((k) => k.startsWith(`${key}[`))
+        .reduce((acc: any, k) => {
+          acc[k] = body[k];
+          return acc;
+        }, {});
 
-      for (const bKey in body) {
-        if (bKey.startsWith(prefix)) {
-          const newKey = bKey.substring(prefix.length, bKey.length - 1);
-          const path = newKey.replace(/\]/g, "").split("[");
-          let current = subBody;
-          for (let i = 0; i < path.length - 1; i++) {
-            current[path[i]] = current[path[i]] || {};
-            current = current[path[i]];
-          }
-          current[path[path.length - 1]] = body[bKey];
-        }
-      }
+      const filteredFiles = Object.keys(files || {})
+        .filter((k) => k.startsWith(`${key}[`))
+        .reduce((acc: any, k) => {
+          acc[k] = files[k];
+          return acc;
+        }, {});
 
-      for (const fKey in files) {
-        if (fKey.startsWith(prefix)) {
-          const newKey = fKey.substring(prefix.length, fKey.length - 1);
-          const path = newKey.replace(/\]/g, "").split("[");
-          let current = subFiles;
-          for (let i = 0; i < path.length - 1; i++) {
-            current[path[i]] = current[path[i]] || {};
-            current = current[path[i]];
-          }
-          current[path[path.length - 1]] = files[fKey];
-        }
-      }
+      // تحويلهم إلى Object حقيقي باستخدام qs
+      const parsedBody = qs.parse(filteredBody);
+      const parsedFiles = qs.parse(filteredFiles);
 
-      data[key] = await storeSectionData(subBody, subFiles, children);
+      // استدعاء الدالة بشكل متداخل
+      data[key] = await storeSectionData(
+        parsedBody[key] || {},
+        parsedFiles[key] || {},
+        children
+      );
     } else if (type === "repeater") {
       const items = body?.[key] || [];
       const result: any[] = [];
